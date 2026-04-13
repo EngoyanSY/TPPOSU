@@ -24,3 +24,31 @@ pip install -r .\requirements.txt
 ```
 python main.py
 ```
+
+## Коммиты
+Проверка изменений в главной ветке
+```
+git checkout main
+git pull origin main
+```
+
+Переход на свою ветку
+```
+# Если ветки еще нет (создать и перейти):
+git checkout -b имя-вашей-ветки #git checkout -b cpp_code
+
+# Если ветка уже была создана ранее (просто перейти):
+git checkout имя-вашей-ветки    #git checkout cpp_code
+```
+
+Создание коммита
+```
+git add .
+git commit -m "Добавил фильтрацию в таблицу"
+```
+
+Пуш
+```
+git push origin имя-вашей-ветки #git push origin cpp_code
+```
+На GitHub открыть свой репозиторий, нажать Compare & pull request, описать изменений и Create pull request
