@@ -118,7 +118,7 @@ class RegistrationSetupWindow(ctk.CTkToplevel):
                 round(random.uniform(0.001, 0.005), 5),
                 random.randint(10, 20),
                 random.randint(40, 50),
-                f"{random.uniform(68.5, 69.9):.1f}_Ф"
+                f"{random.uniform(68.5, 69.9):.1f}"
             ]
             new_data.append(row)
 
@@ -170,7 +170,7 @@ class App(ctk.CTk):
         self.operator_name = "—"
         self.all_data = []
         self.current_page = 0
-        self.rows_per_page = 500
+        self.rows_per_page = 100
 
         self.title("Система мониторинга")
         self.after(0, lambda: self.state('zoomed'))
