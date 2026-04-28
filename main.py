@@ -1,6 +1,7 @@
 import os
 import sys
 from ui import App
+from ui.database import create_database_and_tables
 
 def initialize_project():
     """Проверяет наличие необходимых папок и файлов"""
@@ -11,6 +12,8 @@ def initialize_project():
 def main():
     # Инициализация (создание папок, если их нет)
     initialize_project()
+
+    create_database_and_tables()
 
     # Запуск приложения
     app = App()
