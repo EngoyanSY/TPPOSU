@@ -7,6 +7,7 @@ class Experiments(SQLModel, table=True):
     __tablename__ = "experiments"
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(default="—", max_length=500)
     start_time: datetime = Field(sa_column_kwargs={"server_default": func.now()})
     end_time: Optional[datetime] = Field(default=None)
     operator: str = Field(default="—", max_length=100)
