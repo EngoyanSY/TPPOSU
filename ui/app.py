@@ -2,6 +2,9 @@ import customtkinter as ctk
 import tksheet
 import random
 from datetime import datetime
+from sqlmodel import Session
+
+from ui.database import Experiments, Measurements, engine
 
 
 class LoginWindow(ctk.CTkToplevel):
@@ -92,6 +95,20 @@ class RegistrationSetupWindow(ctk.CTkToplevel):
 
         n_frames = int(frames_raw)
 
+        with Session(engine) as session:
+            new_experiment = Experiments(
+                name=name,
+                operator=self.master.operator_name
+            )
+            session.add(new_experiment)
+            session.commit()
+            session.refresh(new_experiment)
+
+            # сохраняем id, чтобы потом привязать измерения
+            self.experiment_id = new_experiment.id
+
+        self.master.add_log(f"Эксперимент '{name}' создан (ID={self.experiment_id})")
+
         self.experiment_name_entry.configure(border_color=["#979DA2", "#565B5E"])
         self.frames_entry.configure(border_color=["#979DA2", "#565B5E"])
 
@@ -101,6 +118,12 @@ class RegistrationSetupWindow(ctk.CTkToplevel):
         self.btn_start.configure(state="disabled", text="Идёт генерация...")
 
         self.after(50, lambda: self._run_generation(name, n_frames))
+
+        with Session(engine) as session:
+            exp = session.get(Experiments, self.experiment_id)
+            exp.end_time = datetime.now()
+            session.add(exp)
+            session.commit()
 
     def _run_generation(self, name, n_frames):
         self.master.add_log(f"Старт регистрации: '{name}' ({n_frames} кадров)")
