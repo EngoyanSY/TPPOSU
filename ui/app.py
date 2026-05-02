@@ -119,16 +119,14 @@ class RegistrationSetupWindow(ctk.CTkToplevel):
 
         self.after(50, lambda: self._run_generation(name, n_frames))
 
-        with Session(engine) as session:
-            exp = session.get(Experiments, self.experiment_id)
-            exp.end_time = datetime.now()
-            session.add(exp)
-            session.commit()
-
     def _run_generation(self, name, n_frames):
         self.master.add_log(f"Старт регистрации: '{name}' ({n_frames} кадров)")
 
         new_data = [self.master.headers[:]]
+        batch = []
+        batch_size = 200
+
+        global_index = 1  # сквозная нумерация
 
         for i in range(1, n_frames + 1):
             row = [
@@ -136,25 +134,80 @@ class RegistrationSetupWindow(ctk.CTkToplevel):
                 round(random.uniform(0.1, 0.9), 3),
                 round(random.uniform(0.1, 0.9), 3),
                 round(random.uniform(0.1, 0.9), 3),
-                round(random.uniform(0.1, 0.9), 3),
+                random.choice([True, False]),
                 round(random.uniform(0.4, 0.6), 4),
                 round(random.uniform(0.001, 0.005), 5),
                 random.randint(10, 20),
                 random.randint(40, 50),
-                f"{random.uniform(68.5, 69.9):.1f}"
+                round(random.uniform(68.5, 69.9), 1)
             ]
-            new_data.append(row)
 
+            new_data.append(row)
+            batch.append((global_index, row))
+            global_index += 1
+
+            # запись батчем
+            if len(batch) >= batch_size:
+                self.save_measurements_batch(self.experiment_id, batch)
+                batch.clear()
+
+            # обновление прогресса
             if i % max(1, n_frames // 20) == 0:
                 progress = i / n_frames
                 self.progress_bar.set(progress)
                 self.loading_label.configure(text=f"Генерация... {int(progress*100)}%")
                 self.update_idletasks()
 
+        # дописываем остаток
+        if batch:
+            self.save_measurements_batch(self.experiment_id, batch)
+
         self.master.set_full_data(new_data)
         self.master.add_log(f"✅ Сгенерировано {n_frames} строк")
 
+        self.finish_experiment()
+
         self.destroy()
+    
+    def save_measurements_batch(self, experiment_id, batch):
+        """
+        batch = [(number, row), ...]
+        """
+
+        with Session(engine) as session:
+            objects = []
+
+            for number, row in batch:
+                obj = Measurements(
+                    experiment_id=experiment_id,
+                    number=number,
+                    channel_1=row[0],
+                    channel_2=row[1],
+                    channel_3=row[2],
+                    channel_4=row[3],
+                    channel_5=row[4],
+                    channel_6_avg=row[5],
+                    channel_6_disp=row[6],
+                    channel_19=row[7],
+                    channel_49=row[8],
+                    channel_69_func=row[9]
+                )
+                objects.append(obj)
+
+            session.add_all(objects)
+            session.commit()
+    
+    def finish_experiment(self):
+        from datetime import datetime
+
+        with Session(engine) as session:
+            exp = session.get(Experiments, self.experiment_id)
+            if exp:
+                exp.end_time = datetime.now()
+                session.add(exp)
+                session.commit()
+
+        self.master.add_log(f"⏹ Эксперимент завершён (ID={self.experiment_id})")
 
 
 class AboutWindow(ctk.CTkToplevel):
