@@ -6,6 +6,11 @@ from sqlmodel import Session
 
 from ui.database import Experiments, Measurements, engine
 
+import os
+import pandas as pd
+from pathlib import Path
+from sqlmodel import select
+
 
 class LoginWindow(ctk.CTkToplevel):
     def __init__(self, parent):
@@ -208,6 +213,7 @@ class RegistrationSetupWindow(ctk.CTkToplevel):
                 session.commit()
 
         self.master.add_log(f"⏹ Эксперимент завершён (ID={self.experiment_id})")
+        self.master.download_btn.configure(state="normal")
 
 
 class AboutWindow(ctk.CTkToplevel):
@@ -242,6 +248,7 @@ class AboutWindow(ctk.CTkToplevel):
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
+        self.download_btn = None
 
         self.operator_name = "—"
         self.all_data = []
@@ -266,8 +273,14 @@ class App(ctk.CTk):
             ("Регистрация данных", self.open_registration_setup),
             ("Управление данными", None),
             ("Научно-технический расчет", None),
-            ("О программе", self.open_about)
+            ("О программе", self.open_about),
         ]
+
+        self.download_btn = ctk.CTkButton(btn_frame, text="Скачать данные (XLSX)", 
+                                        width=160, command=self.download_last_experiment)
+        self.download_btn.pack(side="left", padx=5, pady=10)
+        self.download_btn.configure(state="disabled")   # изначально отключена
+
         for text, cmd in buttons:
             ctk.CTkButton(btn_frame, text=text, width=150, command=cmd).pack(side="left", padx=5, pady=10)
 
@@ -411,3 +424,55 @@ class App(ctk.CTk):
 
     def ask_user_info(self):
         self.after(200, lambda: LoginWindow(self))
+
+    def download_last_experiment(self):
+        """Скачивает данные последнего эксперимента в XLSX"""
+        try:
+            with Session(engine) as session:
+                # Получаем последний эксперимент
+                statement = select(Experiments).order_by(Experiments.id.desc()).limit(1)
+                last_exp = session.exec(statement).first()
+
+                if not last_exp:
+                    self.add_log("❌ Нет сохранённых экспериментов")
+                    return
+
+                # Получаем все измерения
+                meas_statement = select(Measurements).where(
+                    Measurements.experiment_id == last_exp.id
+                ).order_by(Measurements.number)
+                
+                measurements = session.exec(meas_statement).all()
+
+                if not measurements:
+                    self.add_log("❌ В эксперименте нет данных")
+                    return
+
+            # Подготовка данных для Excel
+            data = []
+            for m in measurements:
+                data.append([
+                    m.channel_1, m.channel_2, m.channel_3, m.channel_4, m.channel_5,
+                    m.channel_6_avg, m.channel_6_disp, m.channel_19, m.channel_49,
+                    m.channel_69_func
+                ])
+
+            df = pd.DataFrame(data, columns=self.headers)
+
+            # Создаём папку data, если её нет
+            Path("data").mkdir(exist_ok=True)
+
+            # Формируем имя файла
+            safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in last_exp.name)
+            filename = f"{last_exp.id}_{safe_name}_{last_exp.operator}.xlsx"
+            filepath = os.path.join("data", filename)
+
+            df.to_excel(filepath, index=False, engine='openpyxl')
+
+            self.add_log(f"✅ Данные сохранены: {filepath}")
+            
+            # Опционально: открываем папку после сохранения
+            # os.startfile(os.path.abspath("data"))  # для Windows
+
+        except Exception as e:
+            self.add_log(f"❌ Ошибка при выгрузке: {e}")
