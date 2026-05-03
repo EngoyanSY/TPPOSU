@@ -118,9 +118,9 @@ class RegistrationSetupWindow(ctk.CTkToplevel):
         self.frames_entry.configure(border_color=["#979DA2", "#565B5E"])
 
         self.loading_frame.pack(fill="x", padx=30, pady=15)
-        self.loading_label.configure(text="Генерация данных...")
+        self.loading_label.configure(text="Регистрация данных...")
         self.progress_bar.set(0)
-        self.btn_start.configure(state="disabled", text="Идёт генерация...")
+        self.btn_start.configure(state="disabled", text="Идёт регистрация...")
 
         self.after(50, lambda: self._run_generation(name, n_frames))
 
@@ -131,10 +131,9 @@ class RegistrationSetupWindow(ctk.CTkToplevel):
         batch = []
         batch_size = 200
 
-        global_index = 1  # сквозная нумерация
-
         for i in range(1, n_frames + 1):
             row = [
+                i,
                 round(random.uniform(0.1, 0.9), 3),
                 round(random.uniform(0.1, 0.9), 3),
                 round(random.uniform(0.1, 0.9), 3),
@@ -148,8 +147,7 @@ class RegistrationSetupWindow(ctk.CTkToplevel):
             ]
 
             new_data.append(row)
-            batch.append((global_index, row))
-            global_index += 1
+            batch.append(row)
 
             # запись батчем
             if len(batch) >= batch_size:
@@ -160,7 +158,7 @@ class RegistrationSetupWindow(ctk.CTkToplevel):
             if i % max(1, n_frames // 20) == 0:
                 progress = i / n_frames
                 self.progress_bar.set(progress)
-                self.loading_label.configure(text=f"Генерация... {int(progress*100)}%")
+                self.loading_label.configure(text=f"Регистрация... {int(progress*100)}%")
                 self.update_idletasks()
 
         # дописываем остаток
@@ -168,7 +166,7 @@ class RegistrationSetupWindow(ctk.CTkToplevel):
             self.save_measurements_batch(self.experiment_id, batch)
 
         self.master.set_full_data(new_data)
-        self.master.add_log(f"✅ Сгенерировано {n_frames} строк")
+        self.master.add_log(f"✅ Зарегистрировано {n_frames} кадров")
 
         self.finish_experiment()
 
@@ -176,26 +174,26 @@ class RegistrationSetupWindow(ctk.CTkToplevel):
     
     def save_measurements_batch(self, experiment_id, batch):
         """
-        batch = [(number, row), ...]
+        batch = [row, ...]
         """
 
         with Session(engine) as session:
             objects = []
 
-            for number, row in batch:
+            for row in batch:
                 obj = Measurements(
                     experiment_id=experiment_id,
-                    number=number,
-                    channel_1=row[0],
-                    channel_2=row[1],
-                    channel_3=row[2],
-                    channel_4=row[3],
-                    channel_5=row[4],
-                    channel_6_avg=row[5],
-                    channel_6_disp=row[6],
-                    channel_19=row[7],
-                    channel_49=row[8],
-                    channel_69_func=row[9]
+                    number=row[0],
+                    channel_1=row[1],
+                    channel_2=row[2],
+                    channel_3=row[3],
+                    channel_4=row[4],
+                    channel_5=row[5],
+                    channel_6_avg=row[6],
+                    channel_6_disp=row[7],
+                    channel_19=row[8],
+                    channel_49=row[9],
+                    channel_69_func=row[10]
                 )
                 objects.append(obj)
 
@@ -270,13 +268,15 @@ class App(ctk.CTk):
         btn_frame.pack(side="left", padx=10)
 
         buttons = [
-            ("Регистрация данных", self.open_registration_setup),
+            # ("Регистрация данных", self.open_registration_setup),
             ("Управление данными", None),
             ("Научно-технический расчет", None),
             ("О программе", self.open_about),
         ]
 
-        self.download_btn = ctk.CTkButton(btn_frame, text="Скачать данные (XLSX)", 
+        self.registration_btn = ctk.CTkButton(btn_frame, text="Регистрация данных", width=150, command=self.open_registration_setup).pack(side="left", padx=5, pady=10)
+
+        self.download_btn = ctk.CTkButton(btn_frame, text="Скачать данные эксперимента", 
                                         width=160, command=self.download_last_experiment)
         self.download_btn.pack(side="left", padx=5, pady=10)
         self.download_btn.configure(state="disabled")   # изначально отключена
@@ -334,7 +334,7 @@ class App(ctk.CTk):
         self.log_view.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         self.log_view.configure(state="disabled")
 
-        self.headers = ["Канал 1", "Канал 2", "Канал 3", "Канал 4", "Канал 5",
+        self.headers = ["Кадр", "Канал 1", "Канал 2", "Канал 3", "Канал 4", "Канал 5",
                         "Канал 6 Среднее", "Канал 6 Дисперсия", "Канал 19", "Канал 49", "Канал 69 F"]
 
         self.sheet.headers(self.headers)
@@ -452,6 +452,7 @@ class App(ctk.CTk):
             data = []
             for m in measurements:
                 data.append([
+                    m.number,
                     m.channel_1, m.channel_2, m.channel_3, m.channel_4, m.channel_5,
                     m.channel_6_avg, m.channel_6_disp, m.channel_19, m.channel_49,
                     m.channel_69_func
