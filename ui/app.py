@@ -295,15 +295,24 @@ class App(ctk.CTk):
         self.sheet = tksheet.Sheet(
             self.table_frame,
             show_row_index=True,
-            font=("Arial", 11, "normal"),
-            header_font=("Arial", 12, "bold"),
+            font=("Arial", 14, "normal"),
+            header_font=("Arial", 16, "bold"),
             theme="dark",
-            all_columns_displayed_stretched=True 
+            all_columns_displayed_stretched=True,
+        )
+        self.sheet.enable_bindings(
+            (
+                "single_select",  # Разрешить выделение ячеек
+                "drag_select",  # Разрешить выделение диапазонов
+                "copy",  # Разрешить копирование текста (Ctrl + C)
+                "arrowkeys",  # Навигация стрелками
+                "column_width_resize",  # Изменение ширины колонок
+                "row_height_resize",  # Изменение высоты строк
+            )
         )
 
         self.sheet.pack(expand=True, fill="both", padx=5, pady=5)
-        self.sheet.enable_bindings("all")
-
+        self.sheet.refresh()
         # Панель пагинации
         self.pagination_frame = ctk.CTkFrame(self.table_frame, fg_color="transparent")
         self.pagination_frame.pack(fill="x", pady=(0, 10))
@@ -330,7 +339,7 @@ class App(ctk.CTk):
                       fg_color="gray", hover_color="#666666",
                       command=self.clear_logs).pack(side="right")
 
-        self.log_view = ctk.CTkTextbox(self.log_frame, font=("Courier", 12), height=10)
+        self.log_view = ctk.CTkTextbox(self.log_frame, font=("Courier", 14), height=10)
         self.log_view.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         self.log_view.configure(state="disabled")
 
