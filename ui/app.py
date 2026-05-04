@@ -242,6 +242,113 @@ class AboutWindow(ctk.CTkToplevel):
         y = self.master.winfo_y() + (self.master.winfo_height() // 2) - (self.winfo_height() // 2)
         self.geometry(f"+{x}+{y}")
 
+class DataManagementWindow(ctk.CTkToplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+
+        self.title("Управление данными")
+        self.geometry("500x600")
+        self.grab_set()
+        self.attributes("-topmost", True)
+
+        ctk.CTkLabel(self, text="Выбор эксперимента", font=("Arial", 16, "bold")).pack(pady=10)
+
+        # ===== Список экспериментов =====
+        self.exp_combo = ctk.CTkComboBox(self, width=300)
+        self.exp_combo.pack(pady=10)
+
+        self.experiments_map = {}  # name -> id
+        self.load_experiments()
+
+        # ===== Чекбоксы каналов =====
+        ctk.CTkLabel(self, text="Выберите каналы:", font=("Arial", 14)).pack(pady=10)
+
+        self.channels = [
+            ("Кадр", "number"),
+            ("Канал 1", "channel_1"),
+            ("Канал 2", "channel_2"),
+            ("Канал 3", "channel_3"),
+            ("Канал 4", "channel_4"),
+            ("Канал 5", "channel_5"),
+            ("Канал 6 Среднее", "channel_6_avg"),
+            ("Канал 6 Дисперсия", "channel_6_disp"),
+            ("Канал 19", "channel_19"),
+            ("Канал 49", "channel_49"),
+            ("Канал 69 F", "channel_69_func"),
+        ]
+
+        self.check_vars = {}
+
+        frame = ctk.CTkFrame(self)
+        frame.pack(pady=10, fill="both", expand=True)
+
+        for text, field in self.channels:
+            var = ctk.BooleanVar(value=True)
+            cb = ctk.CTkCheckBox(frame, text=text, variable=var)
+            cb.pack(anchor="w", padx=20, pady=2)
+            self.check_vars[field] = var
+
+        # ===== Кнопка =====
+        ctk.CTkButton(self, text="Загрузить данные", command=self.load_data).pack(pady=20)
+
+    def load_experiments(self):
+        with Session(engine) as session:
+            exps = session.exec(select(Experiments)).all()
+
+            names = []
+            for exp in exps:
+                display = f"{exp.id} | {exp.name}"
+                names.append(display)
+                self.experiments_map[display] = exp.id
+
+            if names:
+                self.exp_combo.configure(values=names)
+                self.exp_combo.set(names[-1])
+    
+    def load_data(self):
+        selected = self.exp_combo.get()
+
+        if selected not in self.experiments_map:
+            return
+
+        exp_id = self.experiments_map[selected]
+
+        selected_fields = [f for f, v in self.check_vars.items() if v.get()]
+
+        if not selected_fields:
+            return
+
+        with Session(engine) as session:
+            statement = select(Measurements).where(
+                Measurements.experiment_id == exp_id
+            ).order_by(Measurements.number)
+
+            rows = session.exec(statement).all()
+
+        # ===== Формируем таблицу =====
+        headers_map = dict(self.channels)
+
+        headers_map = {field: text for text, field in self.channels}
+
+        headers = [headers_map[f] for f in selected_fields]
+
+        data = [headers]
+
+        for r in rows:
+            row = []
+            for f in selected_fields:
+                row.append(getattr(r, f))
+            data.append(row)
+
+        # ===== Передаём в главное окно =====
+        self.parent.headers = headers
+        self.parent.sheet.headers(headers)
+
+        self.parent.set_full_data(data)
+        self.parent.add_log(f"Загружен эксперимент ID={exp_id}")
+
+        self.destroy()
 
 class App(ctk.CTk):
     def __init__(self):
@@ -269,7 +376,7 @@ class App(ctk.CTk):
 
         buttons = [
             # ("Регистрация данных", self.open_registration_setup),
-            ("Управление данными", None),
+            ("Управление данными", self.open_data_management),
             ("Научно-технический расчет", None),
             ("О программе", self.open_about),
         ]
@@ -486,3 +593,6 @@ class App(ctk.CTk):
 
         except Exception as e:
             self.add_log(f"❌ Ошибка при выгрузке: {e}")
+
+    def open_data_management(self):
+        DataManagementWindow(self)
