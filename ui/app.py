@@ -9,6 +9,7 @@ from ui.database import Experiments, Measurements, engine
 import os
 import pandas as pd
 from pathlib import Path
+import json
 from sqlmodel import select
 
 
@@ -213,6 +214,121 @@ class RegistrationSetupWindow(ctk.CTkToplevel):
         self.master.add_log(f"⏹ Эксперимент завершён (ID={self.experiment_id})")
         self.master.download_btn.configure(state="normal")
 
+class CalculationWindow(ctk.CTkToplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        
+        self.title("Научно-технический расчёт")
+        self.geometry("500x280")
+        self.attributes("-topmost", True)
+        self.grab_set()
+        self.after(100, self._center_window)
+
+        ctk.CTkLabel(self, text="Научно-технический расчёт", 
+                     font=("Arial", 18, "bold")).pack(pady=15)
+
+        ctk.CTkLabel(self, text="Выберите файл эксперимента (JSON):", 
+                     font=("Arial", 14)).pack(anchor="w", padx=40, pady=(10, 5))
+
+        self.file_combo = ctk.CTkComboBox(self, width=420, values=[])
+        self.file_combo.pack(pady=8, padx=40)
+
+        # Кнопки
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(pady=20)
+
+        ctk.CTkButton(
+            btn_frame,
+            text="🔄 Обновить список",
+            width=180,
+            command=self.load_json_files
+        ).pack(side="left", padx=10)
+
+        ctk.CTkButton(
+            btn_frame,
+            text="📊 Загрузить данные для расчетов",
+            width=220,
+            height=40,
+            font=("Arial", 14, "bold"),
+            command=self.load_and_show_data
+        ).pack(side="left", padx=10)
+
+        self.load_json_files()  # Автозагрузка при открытии
+
+    def _center_window(self):
+        x = self.master.winfo_x() + (self.master.winfo_width() // 2) - (self.winfo_width() // 2)
+        y = self.master.winfo_y() + (self.master.winfo_height() // 2) - (self.winfo_height() // 2)
+        self.geometry(f"+{x}+{y}")
+
+    def load_json_files(self):
+        """Обновляет список JSON-файлов в папке data"""
+        data_path = Path("data")
+        data_path.mkdir(exist_ok=True)
+
+        json_files = sorted(
+            data_path.glob("*.json"),
+            key=lambda x: x.stat().st_mtime,
+            reverse=True
+        )
+
+        if not json_files:
+            self.file_combo.configure(values=["Нет JSON-файлов в папке data/"])
+            self.file_combo.set("Нет JSON-файлов в папке data/")
+            return
+
+        file_names = [f.name for f in json_files]
+        self.file_combo.configure(values=file_names)
+        
+        if file_names:
+            self.file_combo.set(file_names[0])  # самый новый файл по умолчанию
+
+    def load_and_show_data(self):
+        """Загружает выбранный JSON и передаёт данные в главное окно"""
+        selected = self.file_combo.get()
+        
+        if not selected or "Нет JSON-файлов" in selected:
+            self.parent.add_log("❌ JSON-файл не выбран")
+            return
+
+        file_path = Path("data") / selected
+
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            # Поддержка двух возможных структур JSON
+            if isinstance(data, dict):
+                headers = data.get("headers")
+                measurements = data.get("measurements") or data.get("data")
+            else:
+                # Если JSON — просто список списков
+                headers = measurements[0] if measurements and isinstance(measurements[0], list) else None
+                measurements = data
+
+            if not headers or not measurements:
+                self.parent.add_log("❌ Некорректная структура JSON (нет headers или measurements)")
+                return
+
+            # Формируем полные данные для таблицы
+            full_data = [headers] + measurements
+
+            # Передаём в главное окно
+            self.parent.set_full_data(full_data)
+            self.parent.headers = headers
+            self.parent.sheet.headers(headers)
+
+            self.parent.add_log(f"✅ Загружено из {selected}")
+            self.parent.add_log(f"   Строк: {len(measurements)} | Столбцов: {len(headers)}")
+
+            self.destroy()  # закрываем окно после успешной загрузки
+
+        except FileNotFoundError:
+            self.parent.add_log(f"❌ Файл не найден: {selected}")
+        except json.JSONDecodeError:
+            self.parent.add_log(f"❌ Ошибка формата JSON: {selected}")
+        except Exception as e:
+            self.parent.add_log(f"❌ Ошибка при загрузке: {e}")
 
 class AboutWindow(ctk.CTkToplevel):
     def __init__(self, parent):
@@ -441,7 +557,7 @@ class App(ctk.CTk):
         buttons = [
             # ("Регистрация данных", self.open_registration_setup),
             ("Управление данными", self.open_data_management),
-            ("Научно-технический расчет", None),
+            ("Научно-технический расчет", self.open_calculation_window),
             ("О программе", self.open_about),
         ]
 
@@ -597,6 +713,14 @@ class App(ctk.CTk):
 
     def open_registration_setup(self):
         RegistrationSetupWindow(self)
+        self.add_log("Открыто окно 'Регистрации данных'")
+
+    def open_data_management(self):
+        DataManagementWindow(self)
+        self.add_log("Открыто окно 'Управление данными'")
+    def open_calculation_window(self):
+        CalculationWindow(self)
+        self.add_log("Открыто окно 'Научно-технический расчёт'")
 
     def open_about(self):
         AboutWindow(self)
@@ -657,6 +781,3 @@ class App(ctk.CTk):
 
         except Exception as e:
             self.add_log(f"❌ Ошибка при выгрузке: {e}")
-
-    def open_data_management(self):
-        DataManagementWindow(self)
