@@ -248,7 +248,7 @@ class DataManagementWindow(ctk.CTkToplevel):
         self.parent = parent
 
         self.title("Управление данными")
-        self.geometry("500x600")
+        self.geometry("500x800")
         self.grab_set()
         self.attributes("-topmost", True)
 
@@ -258,8 +258,20 @@ class DataManagementWindow(ctk.CTkToplevel):
         self.exp_combo = ctk.CTkComboBox(self, width=300)
         self.exp_combo.pack(pady=10)
 
-        self.experiments_map = {}  # name -> id
-        self.load_experiments()
+        self.experiments_map = {}
+        self.exp_combo.configure(command=lambda _: self.update_frame_range())
+
+        # ===== Диапазон кадров (ПЕРЕНЕСЁН ВЫШЕ!) =====
+        ctk.CTkLabel(self, text="Диапазон кадров:", font=("Arial", 14)).pack(pady=(15, 5))
+
+        range_frame = ctk.CTkFrame(self, fg_color="transparent")
+        range_frame.pack()
+
+        self.frame_from = ctk.CTkEntry(range_frame, width=100)
+        self.frame_from.pack(side="left", padx=5)
+
+        self.frame_to = ctk.CTkEntry(range_frame, width=100)
+        self.frame_to.pack(side="left", padx=5)
 
         # ===== Чекбоксы каналов =====
         ctk.CTkLabel(self, text="Выберите каналы:", font=("Arial", 14)).pack(pady=10)
@@ -290,8 +302,18 @@ class DataManagementWindow(ctk.CTkToplevel):
             self.check_vars[field] = var
 
         # ===== Кнопка =====
-        ctk.CTkButton(self, text="Загрузить данные", command=self.load_data).pack(pady=20)
+        bottom_frame = ctk.CTkFrame(self)
+        bottom_frame.pack(fill="x", pady=10)
 
+        ctk.CTkButton(
+            bottom_frame,
+            text="Загрузить данные",
+            command=self.load_data,
+            height=40
+        ).pack(pady=10)
+        self.load_experiments()
+
+    # =========================
     def load_experiments(self):
         with Session(engine) as session:
             exps = session.exec(select(Experiments)).all()
@@ -305,8 +327,10 @@ class DataManagementWindow(ctk.CTkToplevel):
             if names:
                 self.exp_combo.configure(values=names)
                 self.exp_combo.set(names[-1])
-    
-    def load_data(self):
+                self.update_frame_range()
+
+    # =========================
+    def update_frame_range(self):
         selected = self.exp_combo.get()
 
         if selected not in self.experiments_map:
@@ -314,39 +338,79 @@ class DataManagementWindow(ctk.CTkToplevel):
 
         exp_id = self.experiments_map[selected]
 
+        with Session(engine) as session:
+            statement = select(Measurements.number).where(
+                Measurements.experiment_id == exp_id
+            ).order_by(Measurements.number.desc()).limit(1)
+
+            max_frame = session.exec(statement).first()
+
+        if max_frame:
+            self.frame_from.delete(0, "end")
+            self.frame_from.insert(0, "1")
+
+            self.frame_to.delete(0, "end")
+            self.frame_to.insert(0, str(max_frame))
+
+    # =========================
+    def load_data(self):
+        selected = self.exp_combo.get()
+
+        if selected not in self.experiments_map:
+            self.parent.add_log("❌ Эксперимент не выбран")
+            return
+
+        exp_id = self.experiments_map[selected]
+
         selected_fields = [f for f, v in self.check_vars.items() if v.get()]
 
         if not selected_fields:
+            self.parent.add_log("❌ Не выбраны каналы")
             return
 
+        # диапазон
+        try:
+            frame_from = int(self.frame_from.get())
+        except:
+            frame_from = 1
+
+        try:
+            frame_to = int(self.frame_to.get())
+        except:
+            frame_to = 10**9
+
+        if frame_from > frame_to:
+            self.parent.add_log("❌ Неверный диапазон кадров")
+            return
+
+        # запрос
         with Session(engine) as session:
             statement = select(Measurements).where(
-                Measurements.experiment_id == exp_id
+                Measurements.experiment_id == exp_id,
+                Measurements.number >= frame_from,
+                Measurements.number <= frame_to
             ).order_by(Measurements.number)
 
             rows = session.exec(statement).all()
 
-        # ===== Формируем таблицу =====
-        headers_map = dict(self.channels)
+        if not rows:
+            self.parent.add_log("❌ Нет данных")
+            return
 
+        # заголовки
         headers_map = {field: text for text, field in self.channels}
-
         headers = [headers_map[f] for f in selected_fields]
 
         data = [headers]
 
         for r in rows:
-            row = []
-            for f in selected_fields:
-                row.append(getattr(r, f))
-            data.append(row)
+            data.append([getattr(r, f) for f in selected_fields])
 
-        # ===== Передаём в главное окно =====
         self.parent.headers = headers
         self.parent.sheet.headers(headers)
-
         self.parent.set_full_data(data)
-        self.parent.add_log(f"Загружен эксперимент ID={exp_id}")
+
+        self.parent.add_log(f"📥 Загружен эксперимент ID={exp_id} | кадров: {len(rows)}")
 
         self.destroy()
 
